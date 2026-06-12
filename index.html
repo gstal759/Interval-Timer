@@ -1,4 +1,4 @@
-OCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -44,9 +44,16 @@ OCTYPE html>
       box-sizing: border-box;
     }
 
+    #repDisplay {
+      font-size: 34px;
+      margin-top: 25px;
+      font-weight: bold;
+      color: #ffc107;
+    }
+
     #phase {
       font-size: 32px;
-      margin-top: 30px;
+      margin-top: 10px;
       font-weight: bold;
     }
 
@@ -87,12 +94,16 @@ OCTYPE html>
   <h1>Repeat Timer</h1>
 
   <div class="timer-box">
+    <label for="readyTime">Ready Time, seconds</label>
+    <input type="number" id="readyTime" value="5" min="0" />
+
     <label for="workTime">Countdown Time, seconds</label>
     <input type="number" id="workTime" value="10" min="1" />
 
     <label for="restTime">Rest Time, seconds</label>
     <input type="number" id="restTime" value="5" min="1" />
 
+    <div id="repDisplay">Ready</div>
     <div id="phase">Ready</div>
     <div id="display">00</div>
 
@@ -105,35 +116,49 @@ OCTYPE html>
     let timer = null;
     let currentTime = 0;
     let isRunning = false;
-    let phase = "work";
+    let phase = "ready";
+    let repCount = 1;
     let audioContext = null;
+    let hasStartedFirstRep = false;
 
     const display = document.getElementById("display");
     const phaseText = document.getElementById("phase");
+    const repDisplay = document.getElementById("repDisplay");
 
     function startTimer() {
       if (isRunning) return;
 
+      const readyTime = parseInt(document.getElementById("readyTime").value);
       const workTime = parseInt(document.getElementById("workTime").value);
       const restTime = parseInt(document.getElementById("restTime").value);
 
-      if (isNaN(workTime) || isNaN(restTime) || workTime <= 0 || restTime <= 0) {
-        alert("Please enter valid countdown and rest times.");
+      if (
+        isNaN(readyTime) || isNaN(workTime) || isNaN(restTime) ||
+        readyTime < 0 || workTime <= 0 || restTime <= 0
+      ) {
+        alert("Please enter valid ready, countdown, and rest times.");
         return;
       }
 
-      // Create audio context after user presses Start.
-      // Browsers require user interaction before sound can play.
       if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
       }
 
       isRunning = true;
 
-      if (currentTime === 0) {
-        phase = "work";
-        currentTime = workTime;
-        playAlert("work");
+      if (currentTime === 0 && !hasStartedFirstRep) {
+        repCount = 1;
+
+        if (readyTime > 0) {
+          phase = "ready";
+          currentTime = readyTime;
+          playAlert("ready");
+        } else {
+          phase = "work";
+          currentTime = workTime;
+          hasStartedFirstRep = true;
+          playAlert("work");
+        }
       }
 
       updateDisplay();
@@ -142,19 +167,31 @@ OCTYPE html>
         currentTime--;
 
         if (currentTime <= 0) {
-          if (phase === "work") {
-            phase = "rest";
-            currentTime = restTime;
-            playAlert("rest");
-          } else {
-            phase = "work";
-            currentTime = workTime;
-            playAlert("work");
-          }
+          moveToNextPhase(workTime, restTime);
         }
 
         updateDisplay();
       }, 1000);
+    }
+
+    function moveToNextPhase(workTime, restTime) {
+      if (phase === "ready") {
+        phase = "work";
+        currentTime = workTime;
+        hasStartedFirstRep = true;
+        playAlert("work");
+      } 
+      else if (phase === "work") {
+        phase = "rest";
+        currentTime = restTime;
+        playAlert("rest");
+      } 
+      else if (phase === "rest") {
+        repCount++;
+        phase = "work";
+        currentTime = workTime;
+        playAlert("work");
+      }
     }
 
     function stopTimer() {
@@ -166,7 +203,11 @@ OCTYPE html>
     function resetTimer() {
       stopTimer();
       currentTime = 0;
-      phase = "work";
+      phase = "ready";
+      repCount = 1;
+      hasStartedFirstRep = false;
+
+      repDisplay.textContent = "Ready";
       phaseText.textContent = "Ready";
       display.textContent = "00";
       document.body.style.background = "#111";
@@ -175,10 +216,18 @@ OCTYPE html>
     function updateDisplay() {
       display.textContent = currentTime.toString().padStart(2, "0");
 
-      if (phase === "work") {
+      if (phase === "ready") {
+        repDisplay.textContent = "Get Ready";
+        phaseText.textContent = "Ready";
+        document.body.style.background = "#333";
+      } 
+      else if (phase === "work") {
+        repDisplay.textContent = "Rep " + repCount;
         phaseText.textContent = "Countdown";
         document.body.style.background = "#111";
-      } else {
+      } 
+      else if (phase === "rest") {
+        repDisplay.textContent = "Rep " + repCount;
         phaseText.textContent = "Rest";
         document.body.style.background = "#1b3d1b";
       }
@@ -198,8 +247,14 @@ OCTYPE html>
       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
 
-      // Higher tone for countdown, lower tone for rest
-      oscillator.frequency.value = nextPhase === "work" ? 900 : 500;
+      if (nextPhase === "ready") {
+        oscillator.frequency.value = 700;
+      } else if (nextPhase === "work") {
+        oscillator.frequency.value = 900;
+      } else {
+        oscillator.frequency.value = 500;
+      }
+
       oscillator.type = "sine";
 
       gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
@@ -212,11 +267,11 @@ OCTYPE html>
     function vibratePhone(nextPhase) {
       if (!navigator.vibrate) return;
 
-      if (nextPhase === "work") {
-        // Stronger signal when countdown begins
+      if (nextPhase === "ready") {
+        navigator.vibrate([150, 100, 150]);
+      } else if (nextPhase === "work") {
         navigator.vibrate([200, 100, 200]);
       } else {
-        // Shorter signal when rest begins
         navigator.vibrate(300);
       }
     }
